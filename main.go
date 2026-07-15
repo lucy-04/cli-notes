@@ -9,11 +9,18 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/list"
+	
 )
 
 var (
 	vaultDir string
+	docStyle = lipgloss.NewStyle().Margin(1, 2)
 )
+
+type item struct{
+	title,desc string
+}
 
 type model struct {
 		NoteHeadingInput textinput.Model
@@ -21,7 +28,13 @@ type model struct {
 		NoteTextArea textarea.Model
 		NoteTextAreaValue bool
 		FilePointer *os.File
+		list list.Model
+		showList bool
 }
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.desc }
+func (i item) FilterValue() string { return i.title }
 
 func init() {
 	
@@ -50,12 +63,16 @@ func initialiseModel() model{
 	ta.SetStyles(textarea.DefaultStyles(true)) // default to dark styles.
 	ta.Focus()
 
+	listInit := list.New(listData(), list.NewDefaultDelegate(), 0, 0)
+
 	
 	return model{
 			NoteHeadingInput : ti,
 			NoteHeadingInputValue : false,
 			NoteTextArea: ta,
 			NoteTextAreaValue: false,
+			list: listInit,
+			showList: false,
 		}
 }
 
@@ -72,6 +89,9 @@ func (m model) Update(msg tea.Msg) (tea.Model,tea.Cmd){
 	}
 	if(m.NoteTextAreaValue){
 		m.NoteTextArea , cmd = m.NoteTextArea.Update(msg)
+	}
+	if m.showList{
+		m.list ,cmd  = m.list.Update(msg)
 	}
 	switch msg := msg.(type){
 	case tea.KeyPressMsg:
@@ -132,13 +152,20 @@ func (m model) Update(msg tea.Msg) (tea.Model,tea.Cmd){
 			m.NoteHeadingInputValue = false
 			m.NoteTextAreaValue = true
 			}
-
-		}
+		
+		case "ctrl+l":
+			m.showList = true
 		
 	}
-	
-	return m, cmd
+	case tea.WindowSizeMsg:
+			h, v := docStyle.GetFrameSize()
+			m.list.SetSize(msg.Width-h, msg.Height-v)
+		}
+			return m, cmd
+		
 }
+	
+
 
 func (m model) View() tea.View{
 
@@ -159,8 +186,37 @@ func (m model) View() tea.View{
 	if(m.FilePointer != nil){
 		view = m.NoteTextArea.View()
 	}
+	if m.showList{
+		view = m.list.View()
+	}
 	
 	return tea.NewView(fmt.Sprintf("\n\n%s\n\n%s\n\n%s",welcome,view,help))
+}
+
+func listData() []list.Item{
+	items := make([]list.Item,0)
+	DirList, err := os.ReadDir(vaultDir)
+	if err != nil{
+		log.Fatal("file reading error")
+	}
+	
+	for _,entry := range DirList{
+		if !entry.IsDir(){
+			info , err := entry.Info()
+			if err != nil{
+				continue
+			}
+
+			modTime := info.ModTime().Format("2020-02-13 15:32")
+
+			items = append(items, item{
+				title : entry.Name(),
+				desc: fmt.Sprintf("Last Modified: %s",modTime),
+			})
+		}
+	}
+	return items
+	
 }
 
 func main() {
