@@ -19,6 +19,7 @@ type model struct {
 		NoteHeadingInput textinput.Model
 		NoteHeadingInputValue bool
 		NoteTextArea textarea.Model
+		NoteTextAreaValue bool
 		FilePointer *os.File
 }
 
@@ -54,6 +55,7 @@ func initialiseModel() model{
 			NoteHeadingInput : ti,
 			NoteHeadingInputValue : false,
 			NoteTextArea: ta,
+			NoteTextAreaValue: false,
 		}
 }
 
@@ -68,13 +70,48 @@ func (m model) Update(msg tea.Msg) (tea.Model,tea.Cmd){
 	if(m.NoteHeadingInputValue) {
 		m.NoteHeadingInput,cmd = m.NoteHeadingInput.Update(msg)
 	}
+	if(m.NoteTextAreaValue){
+		m.NoteTextArea , cmd = m.NoteTextArea.Update(msg)
+	}
 	switch msg := msg.(type){
 	case tea.KeyPressMsg:
 		switch msg.String(){
-		case "super+c","q":
+		case "ctrl+c":
 			return m,tea.Quit
-		case "n":
+		case "ctrl+n":
 			m.NoteHeadingInputValue = true
+		case "ctrl+s": // make it autoSave in future
+
+			if m.FilePointer == nil{
+				break;
+			}
+
+			if err := m.FilePointer.Truncate(0); err != nil{
+				fmt.Printf("Cannot save the file")
+				return m,nil
+			}
+
+			if _,err := m.FilePointer.Seek(0,0); err != nil{
+				fmt.Printf("Cannot save the file")
+				return m,nil
+			}
+
+			if _, err := m.FilePointer.WriteString(m.NoteTextArea.Value()); err != nil{
+				fmt.Printf("Cannot save the file")
+				return m,nil
+			}
+
+
+			if err := m.FilePointer.Close(); err != nil {
+				fmt.Printf("Unable to close the file")
+			}
+			
+			m.NoteTextArea.SetValue("")
+			m.NoteTextAreaValue = false
+			m.FilePointer = nil
+
+			return m,nil
+
 		case "enter":
 			fileName := m.NoteHeadingInput.Value()
 			filePath := fmt.Sprintf("%s/%s.md",vaultDir,fileName)
@@ -93,6 +130,7 @@ func (m model) Update(msg tea.Msg) (tea.Model,tea.Cmd){
 			m.FilePointer = f
 			m.NoteHeadingInput.SetValue("")
 			m.NoteHeadingInputValue = false
+			m.NoteTextAreaValue = true
 			}
 
 		}
